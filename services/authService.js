@@ -4,6 +4,7 @@ const asyncHandler = require("express-async-handler");
 const userModel = require("../models/userModel");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const sendEmail = require("../utils/sendEmail");
 
 const createToken = (payload) => {
   return jwt.sign({ userId: payload }, process.env.JWT_SECRET_KEY, {
@@ -116,4 +117,16 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
   user.passwordResetExpire = Date.now() + 10 * 60 * 1000;
   user.passwordResetVervied = false;
   await user.save();
+
+  //3- send the reset code vie email
+
+  const message = `Hi ${user.name},\n we recevied a request to reset password  on your App Account. \n ${resetCode} \n Enter This Code To Reset Password `;
+  await sendEmail({
+    email: user.email,
+    subject: "your password reset code valied for 10 min",
+    message,
+  });
+  res
+    .status(200)
+    .json({ statues: "success", message: "resest code send to email" });
 });

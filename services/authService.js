@@ -126,7 +126,8 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
     subject: "your password reset code valied for 10 min",
     message,
   });
+
   res
     .status(200)
-    .json({ statues: "success", message: "resest code send to email" });
+    .json({ statues: "success", message: "recet code send to email" });
 });

@@ -112,5 +112,8 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
   const hash = crypto.createHash("sha256").update(resetCode).digest("hex");
 
   user.passwordResetCode = hash;
-  user.passwordResetExpire = Date.now() + 10;
+  //add expire time to reset code (10 min)
+  user.passwordResetExpire = Date.now() + 10 * 60 * 1000;
+  user.passwordResetVervied = false;
+  await user.save();
 });

@@ -12,7 +12,7 @@ const brandsroute = require("./routes/BrandRoutes");
 const productsroute = require("./routes/productRoutes");
 const usersroute = require("./routes/userRoutes");
 const authsroute = require("./routes/authRoutes");
-
+const ordersroute = require("./routes/orderRoutes");
 //connnect with db
 
 dbconnect();
@@ -34,6 +34,7 @@ app.use(`/api/${process.env.API_V}/brands`, brandsroute);
 app.use(`/api/${process.env.API_V}/products`, productsroute);
 app.use(`/api/${process.env.API_V}/users`, usersroute);
 app.use(`/api/${process.env.API_V}/auth`, authsroute);
+app.use(`/api/${process.env.API_V}/order`, ordersroute);
 
 app.all("*", (req, res, next) => {
   next(new ApiError(`cant find this Route : ${req.originalUrl}`, 400));

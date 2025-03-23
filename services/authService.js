@@ -131,3 +131,18 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
     .status(200)
     .json({ statues: "success", message: "recet code send to email" });
 });
+
+/*
+Order:
+orderId
+products []
+totalAmount
+discount
+customerAddress
+customerName
+customerPhone
+customerEmail
+status [pending,inprogress,out-for-delivery,delevired]
+quntity
+
+*/

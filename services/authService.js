@@ -1,148 +1,216 @@
 const crypto = require("crypto");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("express-async-handler");
-const userModel = require("../models/userModel");
+const User = require("../models/userModel");
+const Order = require("../models/orderModel");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const sendEmail = require("../utils/sendEmail");
 
+// Helper function to create JWT token
 const createToken = (payload) => {
   return jwt.sign({ userId: payload }, process.env.JWT_SECRET_KEY, {
     expiresIn: process.env.JWT_EXP_TIME,
   });
 };
 
-//@des  signup
-//@route   api/v1/auth/signup
+// User signup route and linking old orders
+
 exports.signUp = asyncHandler(async (req, res, next) => {
-  //create user
-  const user = await userModel.create({
-    name: req.body.name,
-    email: req.body.email,
-    password: req.body.password,
-  });
-  //generate token
-  const token = createToken(user._id);
-  res.status(201).json({ data: user, token });
-});
+  const { name, email, password, phone } = req.body;
 
-//@des  signup
-//@route   api/v1/auth/signup
-exports.logIn = asyncHandler(async (req, res, next) => {
-  //create user
-  const user = await userModel.findOne({
-    email: req.body.email,
-  });
-  //generate token
+  try {
+    // Check if the email already exists in the system
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email already exists!" });
+    }
 
-  if (!user || !(await bcrypt.compare(req.body.password, user.password))) {
-    return next(new ApiError("email or password is incorrect", 401))();
+    // Create a new user
+    const user = await User.create({
+      name,
+      email,
+      password,
+      phone,
+    });
+
+    // Check if there are any existing orders placed by this email (before signup)
+    const guestOrders = await Order.find({ "customerDetails.Email": email });
+
+    if (guestOrders.length > 0) {
+      // If orders exist, associate them with the new user
+      await Order.updateMany(
+        { "customerDetails.Email": email },
+        { $set: { user: user._id } } // Link the user to these orders
+      );
+    }
+
+    // Generate token for the user
+    const token = createToken(user._id);
+
+    // Send the response with user data and token
+    res.status(201).json({
+      message: "User created successfully and orders linked.",
+      data: user,
+      token,
+    });
+  } catch (error) {
+    return next(new ApiError(`Error creating user: ${error.message}`, 500));
   }
+});
+
+// LogIn route
+exports.logIn = asyncHandler(async (req, res, next) => {
+  const { email, password } = req.body;
+
+  // Find user by email
+  const user = await User.findOne({ email });
+
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return next(new ApiError("email or password is incorrect", 401));
+  }
+
+  // Generate token
   const token = createToken(user._id);
+
+  // Send the response with user data and token
   res.status(201).json({ data: user, token });
 });
 
-//MAKE SURE that user is login
+// Middleware to ensure the user is authenticated
 exports.protect = asyncHandler(async (req, res, next) => {
-  //1-check if token exict or not
+  // 1- check if token exists in headers
   let token;
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
   ) {
     token = req.headers.authorization.split(" ")[1];
-    console.log(token);
   }
   if (!token) {
     return next(
       new ApiError(
-        "You are not login, Please login to get access this route",
+        "You are not logged in, please login to access this route",
         401
       )
     );
   }
 
-  //2-verify token
+  // 2- verify token
   const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-  console.log(decoded);
 
-  //3- check if user of token exist
-  const currentUser = await userModel.findById(decoded.userId);
+  // 3- check if user associated with token exists
+  const currentUser = await User.findById(decoded.userId);
   if (!currentUser) {
     return next(
-      new ApiError("the user that belong this token does not exict", 401)
+      new ApiError("The user associated with this token does not exist", 401)
     );
   }
 
-  //4-check if the user chang password after token created
+  // 4- check if password was changed after token was issued
   if (currentUser.passwordChangeAt) {
-    const passChangeTimesStamp = parseInt(
+    const passwordChangeTimestamp = parseInt(
       currentUser.passwordChangeAt.getTime() / 1000,
       10
     );
-    if (passChangeTimesStamp > decoded.iat) {
+    if (passwordChangeTimestamp > decoded.iat) {
       return next(
-        new ApiError("user recntily changed password , please login again", 401)
+        new ApiError("User recently changed password, please login again", 401)
       );
     }
   }
+
   req.user = currentUser;
   next();
 });
 
-exports.allowedTo = (...role) =>
+// Authorization middleware for checking roles
+exports.allowedTo = (...roles) =>
   asyncHandler(async (req, res, next) => {
-    //1-access roles
-    //2-access registered user
-    if (!role.includes(req.user.role)) {
-      return next(new ApiError("you cant access this role", 403));
+    if (!roles.includes(req.user.role)) {
+      return next(
+        new ApiError("You do not have permission to access this route", 403)
+      );
     }
     next();
   });
 
-//to reset your password by send 6 digit number by (reset code) then use crybto to in crybted it
-
+// Forgot password route for sending reset code to email
 exports.forgotPassword = asyncHandler(async (req, res, next) => {
-  //1- get user by email
-  const user = await userModel.findOne({ email: req.body.email });
+  // 1- get user by email
+  const user = await User.findOne({ email: req.body.email });
   if (!user) {
-    return next(new ApiError(`no email for this user ${req.body.email}`, 404));
+    return next(
+      new ApiError(`No user found for this email: ${req.body.email}`, 404)
+    );
   }
 
+  // Generate reset code and hash it
   const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
   const hash = crypto.createHash("sha256").update(resetCode).digest("hex");
 
   user.passwordResetCode = hash;
-  //add expire time to reset code (10 min)
-  user.passwordResetExpire = Date.now() + 10 * 60 * 1000;
+  user.passwordResetExpire = Date.now() + 10 * 60 * 1000; // expires in 10 minutes
   user.passwordResetVervied = false;
   await user.save();
 
-  //3- send the reset code vie email
-
-  const message = `Hi ${user.name},\n we recevied a request to reset password  on your App Account. \n ${resetCode} \n Enter This Code To Reset Password `;
+  // Send reset code via email
+  const message = `Hi ${user.name},\nWe received a request to reset your password on your App Account. \nReset Code: ${resetCode}\nEnter this code to reset your password.`;
   await sendEmail({
     email: user.email,
-    subject: "your password reset code valied for 10 min",
+    subject: "Your password reset code is valid for 10 minutes",
     message,
   });
 
-  res
-    .status(200)
-    .json({ statues: "success", message: "recet code send to email" });
+  res.status(200).json({ message: "Reset code sent to email successfully" });
+});
+// virfiy password route for  reset code to email
+exports.virfyPassResetCode = asyncHandler(async (req, res, next) => {
+  //get user  based on rset code
+
+  const hash = crypto
+    .createHash("sha256")
+    .update(req.body.resetCode)
+    .digest("hex");
+
+  const user = await User.findOne({
+    passwordResetCode: hash,
+    passwordResetExpire: { $gt: Date.now() },
+  });
+  if (!user) {
+    return next(new ApiError("reset code is invialed or expired "));
+  }
+
+  //2- reset code valid
+  user.passwordResetVervied = true;
+  user.save();
+  res.status(200).json({
+    status: "Success",
+  });
 });
 
-/*
-Order:
-orderId
-products []
-totalAmount
-discount
-customerAddress
-customerName
-customerPhone
-customerEmail
-status [pending,inprogress,out-for-delivery,delevired]
-quntity
+//reset password
 
-*/
+exports.resetPassword = asyncHandler(async (req, res, next) => {
+  // 1-get user based on email
+  const user = await User.findOne({ email: req.body.email });
+
+  if (!user) {
+    return next(new ApiError("there no user for this email", 401));
+  }
+
+  //2- check if code is  virfid
+  if (!user.passwordResetVervied) {
+    return next(new ApiError("reset code not virfy", 400));
+  }
+
+  user.password = req.body.newPassword;
+  user.passwordResetCode = undefined;
+  user.passwordResetExpire = undefined;
+  user.passwordResetVervied = undefined;
+  await user.save();
+
+  //3- generate token
+  const token = createToken(user._id);
+  res.status(200).json({ token });
+});

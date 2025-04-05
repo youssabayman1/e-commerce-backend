@@ -3,6 +3,11 @@ const Product = require("./productModel"); // Import the Product model
 
 const orderSchema = new mongoose.Schema(
   {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User", // Reference to the User model
+      required: true,
+    },
     products: [
       {
         product: {

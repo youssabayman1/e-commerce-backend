@@ -9,7 +9,6 @@ const {
 
 // Assuming you have a function named 'getCategories' in your services
 const {
-  getUsers,
   getUser,
   createUser,
   updateUser,
@@ -17,6 +16,7 @@ const {
   uploadUserImage,
   resizeImage,
   changeUserPassword,
+  getUsers,
 } = require("../services/userService");
 const router = express.Router();
 

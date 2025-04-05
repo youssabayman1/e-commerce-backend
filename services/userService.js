@@ -7,6 +7,7 @@ const sharp = require("sharp");
 const { uploadSingleImage } = require("../middlewares/uploudImageMiddlewares");
 const ApiError = require("../utils/ApiError");
 const bcrypt = require("bcrypt");
+const Order = require("../models/orderModel");
 
 exports.uploadUserImage = uploadSingleImage("profileImg");
 
@@ -95,3 +96,19 @@ exports.changeUserPassword = asyncHandler(async (req, res, next) => {
 //@access  private
 
 exports.deleteUser = factory.deleteOne(userModel);
+
+exports.getUserOrders = asyncHandler(async (req, res, next) => {
+  // Find orders for the logged-in user
+  const orders = await Order.find({ user: req.user._id }) // Use req.user._id to get logged-in user's orders
+    .populate({
+      path: "products.product", // Populate the products' details (e.g. name, price, etc.)
+      select: "name price image", // Specify which fields to include in the populated products
+    });
+
+  if (!orders || orders.length === 0) {
+    return next(new ApiError("No orders found for this user", 404));
+  }
+
+  // Return the orders
+  res.status(200).json({ results: orders.length, data: orders });
+});

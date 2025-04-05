@@ -1,6 +1,7 @@
 const ApiError = require("../utils/ApiError");
 const ApiFeatures = require("../utils/apiFeatures");
 const asyncHandler = require("express-async-handler");
+const Order = require("../models/orderModel");
 
 exports.deleteOne = (Modle) =>
   asyncHandler(async (req, res, next) => {
@@ -54,7 +55,7 @@ exports.getMany = (Modle, modleName = "") =>
     }
     console.log(filter);
     // Build query
-    const documentsCounts = await Modle.countDocuments();
+    const documentsCounts = await Order.countDocuments();
     const apiFeatures = new ApiFeatures(Modle.find(filter), req.query)
       .paginate(documentsCounts)
       .search(modleName)

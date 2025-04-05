@@ -5,7 +5,13 @@ const {
 } = require("../utils/validators/authVaildator");
 
 // Assuming you have a function named 'getCategories' in your services
-const { signUp, logIn, forgotPassword } = require("../services/authService");
+const {
+  signUp,
+  logIn,
+  forgotPassword,
+  virfyPassResetCode,
+  resetPassword,
+} = require("../services/authService");
 const {
   createAdmin,
   logInAdmin,
@@ -23,4 +29,7 @@ router.route("/forgetPassword").post(forgotPassword);
 router.route("/loginAdmin").post(logInAdmin);
 router.route("/createAdmin").post(protectAdmin, allowedToAdmin, createAdmin);
 router.route("/forgetPassword").post(forgotPasswordAdmin);
+router.route("/virfiyRestPass").post(virfyPassResetCode);
+router.route("/resetPassword").put(resetPassword);
+
 module.exports = router;
